@@ -1,0 +1,5 @@
+name = CyberCommons Integration
+description = OU Libraries CyberCommons+Drupal Integration
+core = 7.x
+dependencies[] = entity:entity
+dependencies[] = rules:rules 
