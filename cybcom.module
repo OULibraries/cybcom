@@ -1,1 +1,85 @@
 <?php
+
+/**
+ *
+ */
+function cybcom_admin() {
+  $form = array();
+
+  $form['cybcom_xmlurl'] = array(
+    '#type' => 'textfield',
+    '#title' => t('CyberCommons URL'),
+    '#default_value' => variable_get('cybcom_xmlurl', ""),
+    '#required' => TRUE,
+  );
+
+  $form['cybcom_token'] = array(
+    '#type' => 'textfield',
+    '#title' => t('CyberCommons token'),
+    '#default_value' => variable_get('cybcom_token', ""),
+    '#required' => TRUE,
+  );
+
+  return system_settings_form($form);
+}
+
+
+/**
+ *  Implements hook_menu()
+ */
+function cybcom_menu() {
+
+  $items = array();
+
+  $items['admin/config/cybcom'] = array(
+    'title' => 'CyberCommons Settings',
+    'description' => 'Lorem ipsum dolor sit amet',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('cybcom_admin'),
+    'access arguments' => array('administer cybcom settings'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}
+
+
+function cybcom_mintxml($nid) {
+
+  $cybcom_xmlurl = variable_get('cybcom_xmlurl', "");
+  $cybcom_token = variable_get('cybcom_token', "");
+
+  # Load content to send to cyber commons
+  $type = 'node';
+  $wrapper = entity_metadata_wrapper($type, $nid);
+
+  $my_title= $wrapper->title->value();
+
+
+  $cyb_client = new GuzzleHttp\Client([
+                  'defaults' => [
+                    'headers' => [
+                      'Content-Type'=>'application/json',
+                      "Authorization"=>"Token ".$cybcom_token,
+                    ]]]);
+
+  $cyb_body = [
+    "function"=>"xmlgenq.tasks.xmltemplate.metadataTemplateCreation",
+    "queue"=>"celery",
+    "args" => [
+      ["title"=>$my_title],
+    ],
+    "kwargs"=> [
+      "templatename"=>"maps.tmpl",
+      "outname"=>"example.xml"
+    ],
+    "tags"=> ["example.xml"],
+  ];
+
+  $response = $cyb_client->post(
+    $cybcom_xmlurl,
+    ['body' => json_encode($cyb_body),]
+  );
+
+  return  $response->getBody();
+}
