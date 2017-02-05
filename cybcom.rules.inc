@@ -18,6 +18,6 @@ function cybcom_rules_action_info() {
 
 
 function cybcom_rules_action_mintxml ($id) {
-  watchdog('cybcom', "Rule called for ". $id->nid );
+  watchdog('cybcom', "mintxml called for node ". $id->nid );
   cybcom_mintxml($id->nid );
 }

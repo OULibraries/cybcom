@@ -53,8 +53,8 @@ function cybcom_mintxml($nid) {
   $type = 'node';
   $wrapper = entity_metadata_wrapper($type, $nid);
 
-  $my_title= $wrapper->title->value();
-
+  $my_title         = $wrapper->title->value();
+  $my_resource_type = $wrapper->field_resource_type->value()->name; // taxonomy reference
 
   $cyb_client = new GuzzleHttp\Client([
                   'defaults' => [
@@ -67,7 +67,9 @@ function cybcom_mintxml($nid) {
     "function"=>"xmlgenq.tasks.xmltemplate.metadataTemplateCreation",
     "queue"=>"celery",
     "args" => [
-      ["title"=>$my_title],
+      [ "title"         => $my_title,
+        "typeResource" => $my_resource_type
+      ],
     ],
     "kwargs"=> [
       "templatename"=>"maps.tmpl",
@@ -77,7 +79,7 @@ function cybcom_mintxml($nid) {
   ];
 
   $response = $cyb_client->post(
-    $cybcom_xmlurl,
+    $cybcom_xmlurl."/api/queue/run/xmlgenq.tasks.xmltemplate.metadataTemplateCreation/.json",
     ['body' => json_encode($cyb_body),]
   );
 
