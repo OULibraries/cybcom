@@ -1,4 +1,4 @@
-<?php
+><?php
 
 /**
  *
@@ -44,12 +44,16 @@ function cybcom_menu() {
 }
 
 
+/**
+ *  Post to cybercommns to get XML representation of node
+ */
+
 function cybcom_mintxml($nid) {
 
   $cybcom_xmlurl = variable_get('cybcom_xmlurl', "");
   $cybcom_token = variable_get('cybcom_token', "");
 
-  # Load content to send to cyber commons
+
 
   $my_data = _cybcom_getItemArray($nid);
 
@@ -80,16 +84,11 @@ function cybcom_mintxml($nid) {
     ['body' => json_encode($cyb_body),]
   );
 
-  return  $response->getBody();
+  return  $response->json();
 }
 
 
-/*
- * helper to build structure to send to cyber commons for rendering into xml
- */
-
 function _cybcom_getItemArray($nid) {
-
   $myContent=array();
 
   try {
@@ -98,20 +97,39 @@ function _cybcom_getItemArray($nid) {
 
     foreach ($w->getPropertyInfo() as $key => $val) {
 
+      #
+      # Delete special case when template moves from field_title to title
+      #
+      if("title" == $key) {
+        $myContent["title"]=$w->$key->value();
+        continue;
+      }
+
+      #
+      # Delete special case when template fixes spelling of field_alternative
+      #
+      if("field_alternate" == $key) {
+        $myContent["field_alternative"]=$w->$key->value();
+        continue;
+      }
+
       switch( $val['type'] )  {
+
+        # Handle single and multi-value text fields.
         case "text":
+        case "list<text>":
           $myValue = $w->$key->value();
-          if( "" != $myValue) {
+          if(! empty(  $myValue )) {
             $myContent[$key]=$w->$key->value();
           }
           break;
+
         default:
+          # Log unhandled fields. Eventually this should be an error
+          watchdog("cybcom", "Unhandled field ".$key." of type ".$val[type]);
           ;
       }
     }
-
-
-
   } catch (EntityMetadataWrapperException $exc) {
     watchdog(
       'cybcom',
@@ -120,8 +138,5 @@ function _cybcom_getItemArray($nid) {
     WATCHDOG_ERROR
     );
   }
-
-
   return $myContent;
-
 }
