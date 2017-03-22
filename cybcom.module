@@ -50,11 +50,10 @@ function cybcom_mintxml($nid) {
   $cybcom_token = variable_get('cybcom_token', "");
 
   # Load content to send to cyber commons
-  $type = 'node';
-  $wrapper = entity_metadata_wrapper($type, $nid);
 
-  $my_title         = $wrapper->title->value();
-  $my_resource_type = $wrapper->field_resource_type->value()->name; // taxonomy reference
+  $my_data = _cybcom_getItemArray($nid);
+
+
 
   $cyb_client = new GuzzleHttp\Client([
                   'defaults' => [
@@ -67,12 +66,10 @@ function cybcom_mintxml($nid) {
     "function"=>"xmlgenq.tasks.xmltemplate.metadataTemplateCreation",
     "queue"=>"celery",
     "args" => [
-      [ "title"         => $my_title,
-        "typeResource" => $my_resource_type
-      ],
+      $my_data,
     ],
     "kwargs"=> [
-      "templatename"=>"maps.tmpl",
+      "templatename"=>"speccoll.tmpl",
       "outname"=>"example.xml"
     ],
     "tags"=> ["example.xml"],
@@ -84,4 +81,47 @@ function cybcom_mintxml($nid) {
   );
 
   return  $response->getBody();
+}
+
+
+/*
+ * helper to build structure to send to cyber commons for rendering into xml
+ */
+
+function _cybcom_getItemArray($nid) {
+
+  $myContent=array();
+
+  try {
+
+    $w = entity_metadata_wrapper("node", $nid, array('bundle' => 'item'));
+
+    foreach ($w->getPropertyInfo() as $key => $val) {
+
+      switch( $val['type'] )  {
+        case "text":
+          $myValue = $w->$key->value();
+          if( "" != $myValue) {
+            $myContent[$key]=$w->$key->value();
+          }
+          break;
+        default:
+          ;
+      }
+    }
+
+
+
+  } catch (EntityMetadataWrapperException $exc) {
+    watchdog(
+      'cybcom',
+      'EntityMetadataWrapper exception in %function() <pre>@trace</pre>',
+      array('%function' => __FUNCTION__, '@trace' => $exc->getTraceAsString()),
+    WATCHDOG_ERROR
+    );
+  }
+
+
+  return $myContent;
+
 }
