@@ -50,14 +50,12 @@ function cybcom_menu() {
 
 function cybcom_mintxml($nid) {
 
+  watchdog('cybcom', "mintxml called for node ". $id->nid );
+
   $cybcom_xmlurl = variable_get('cybcom_xmlurl', "");
   $cybcom_token = variable_get('cybcom_token', "");
 
-
-
   $my_data = _cybcom_getItemArray($nid);
-
-
 
   $cyb_client = new GuzzleHttp\Client([
                   'defaults' => [
