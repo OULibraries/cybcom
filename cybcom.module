@@ -1,4 +1,4 @@
-><?php
+<?php
 
 /**
  *
@@ -50,122 +50,126 @@ function cybcom_menu() {
 
 function cybcom_mintxml($nid) {
 
-  watchdog('cybcom', "mintxml called for node ". $id->nid );
-
-  $cybcom_xmlurl = variable_get('cybcom_xmlurl', "");
-  $cybcom_token = variable_get('cybcom_token', "");
-
-  $my_data = _cybcom_getItemArray($nid);
-
-  $cyb_client = new GuzzleHttp\Client([
-                  'defaults' => [
-                    'headers' => [
-                      'Content-Type'=>'application/json',
-                      "Authorization"=>"Token ".$cybcom_token,
-                    ]]]);
-
-  $cyb_body = [
-    "function"=>"xmlgenq.tasks.xmltemplate.metadataTemplateCreation",
-    "queue"=>"celery",
-    "args" => [
-      $my_data,
-    ],
-    "kwargs"=> [
-      "templatename"=>"speccoll.tmpl",
-      "outname"=>"example.xml"
-    ],
-    "tags"=> ["example.xml"],
-  ];
-
-  $response = $cyb_client->post(
-    $cybcom_xmlurl."/api/queue/run/xmlgenq.tasks.xmltemplate.metadataTemplateCreation/.json",
-    ['body' => json_encode($cyb_body),]
-  );
-
-  return  $response->json();
-}
-
-
-function _cybcom_getItemArray($nid) {
-  $myContent=array();
-
   try {
 
     $w = entity_metadata_wrapper("node", $nid, array('bundle' => 'item'));
 
-    foreach ($w->getPropertyInfo() as $key => $val) {
 
-      #
-      # Delete special case when template moves from field_title to title
-      #
-      if("title" == $key) {
-          $myValue = $w->$key->value();
-          if(! empty(  $myValue )) {
-            $myContent["title"]=$myValue;
-          }
-        continue;
-      }
+    watchdog('cybcom', "mintxml called for node ". $id->nid );
 
-      #
-      # Delete special case when template fixes spelling of field_alternative
-      #
-      if("field_alternate" == $key) {
-          $myValue = $w->$key->value();
-          if(! empty(  $myValue )) {
-            $myContent["field_alternative"]=$myValue;
-          }
-        continue;
-      }
+    $cybcom_xmlurl = variable_get('cybcom_xmlurl', "");
+    $cybcom_token = variable_get('cybcom_token', "");
 
-      switch( $val['type'] )  {
+    $my_data = _cybcom_wrap2array($w);
 
-        # Handle single and multi-value text fields.
-        case "integer":
-        case "boolean":
-        case "text":
-        case "list<text>":
-          $myValue = $w->$key->value();
-          if(! empty(  $myValue )) {
-            $myContent[$key]=$myValue;
-          }
-          break;
+    $cyb_client = new GuzzleHttp\Client([
+                    'defaults' => [
+                      'headers' => [
+                        'Content-Type'=>'application/json',
+                        "Authorization"=>"Token ".$cybcom_token,
+                      ]]]);
 
-        case "taxonomy_term":
-          $myValue = $w->$key->value();
-          if(! empty(  $myValue )) {
-            $myContent[$key]=$myValue->name;
-          }
-          break;
+    $cyb_body = [
+      "function"=>"xmlgenq.tasks.xmltemplate.metadataTemplateCreation",
+      "queue"=>"celery",
+      "args" => [
+        $my_data,
+      ],
+      "kwargs"=> [
+        "templatename"=>"speccoll.tmpl",
+        "outname"=>"example.xml"
+      ],
+      "tags"=> ["example.xml"],
+    ];
 
-        case "list<taxonomy_term>":
-          $myVec = $w->$key->value();
-          $myTerms = array();
-          foreach( $myVec as $myValue) {
-            array_push($myTerms, $myValue->name);
-          }
-          if(! empty( $myTerms) ) {
-            $myContent[$key]=$myTerms;
-          }
-          break;
+    $response = $cyb_client->post(
+      $cybcom_xmlurl."/api/queue/run/xmlgenq.tasks.xmltemplate.metadataTemplateCreation/.json",
+      ['body' => json_encode($cyb_body),]
+    );
 
+    return  $response->json();
 
-        default:
-          drush_print("KEY :".$key);
-          drush_print("VAL :".$val['type']);
-          drush_print_r($w->$key->value());
-
-          # Log unhandled fields. Eventually this should be an error
-          watchdog("cybcom", "Unhandled field ".$key." of type ".$val[type]);
-          ;
-      }
-    }
   } catch (EntityMetadataWrapperException $exc) {
     watchdog(
       'cybcom',
       'EntityMetadataWrapper exception in %function() <pre>@trace</pre>',
       array('%function' => __FUNCTION__, '@trace' => $exc->getTraceAsString()),
-    WATCHDOG_ERROR
+      WATCHDOG_ERROR
     );
   }
-  return $myContent;
+
+
+}
+
+
+function _cybcom_wrap2array($w) {
+  $myContent=array();
+
+  foreach ($w->getPropertyInfo() as $key => $val) {
+
+    #
+    # Delete special case when template moves from field_title to title
+    #
+    if("title" == $key) {
+      $myValue = $w->$key->value();
+      if(! empty(  $myValue )) {
+        $myContent["title"]=$myValue;
+      }
+      continue;
+    }
+
+    #
+    # Delete special case when template fixes spelling of field_alternative
+    #
+    if("field_alternate" == $key) {
+      $myValue = $w->$key->value();
+      if(! empty(  $myValue )) {
+        $myContent["field_alternative"]=$myValue;
+      }
+      continue;
+    }
+
+    switch( $val['type'] )  {
+
+      # Handle single and multi-value text fields.
+      case "integer":
+      case "boolean":
+      case "text":
+      case "list<text>":
+        $myValue = $w->$key->value();
+        if(! empty(  $myValue )) {
+          $myContent[$key]=$myValue;
+        }
+        break;
+
+      case "taxonomy_term":
+        $myValue = $w->$key->value();
+        if(! empty(  $myValue )) {
+          $myContent[$key]=$myValue->name;
+        }
+        break;
+
+      case "list<taxonomy_term>":
+        $myVec = $w->$key->value();
+        $myTerms = array();
+        foreach( $myVec as $myValue) {
+          array_push($myTerms, $myValue->name);
+        }
+        if(! empty( $myTerms) ) {
+          $myContent[$key]=$myTerms;
+        }
+        break;
+
+
+      default:
+        drush_print("KEY :".$key);
+        drush_print("VAL :".$val['type']);
+        drush_print_r($w->$key->value());
+
+        # Log unhandled fields. Eventually this should be an error
+        watchdog("cybcom", "Unhandled field ".$key." of type ".$val[type]);
+        ;
+    }
+  }
+return $myContent;
 }
