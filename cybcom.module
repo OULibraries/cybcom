@@ -99,7 +99,10 @@ function _cybcom_getItemArray($nid) {
       # Delete special case when template moves from field_title to title
       #
       if("title" == $key) {
-        $myContent["title"]=$w->$key->value();
+          $myValue = $w->$key->value();
+          if(! empty(  $myValue )) {
+            $myContent["title"]=$myValue;
+          }
         continue;
       }
 
@@ -107,22 +110,50 @@ function _cybcom_getItemArray($nid) {
       # Delete special case when template fixes spelling of field_alternative
       #
       if("field_alternate" == $key) {
-        $myContent["field_alternative"]=$w->$key->value();
+          $myValue = $w->$key->value();
+          if(! empty(  $myValue )) {
+            $myContent["field_alternative"]=$myValue;
+          }
         continue;
       }
 
       switch( $val['type'] )  {
 
         # Handle single and multi-value text fields.
+        case "integer":
+        case "boolean":
         case "text":
         case "list<text>":
           $myValue = $w->$key->value();
           if(! empty(  $myValue )) {
-            $myContent[$key]=$w->$key->value();
+            $myContent[$key]=$myValue;
           }
           break;
 
+        case "taxonomy_term":
+          $myValue = $w->$key->value();
+          if(! empty(  $myValue )) {
+            $myContent[$key]=$myValue->name;
+          }
+          break;
+
+        case "list<taxonomy_term>":
+          $myVec = $w->$key->value();
+          $myTerms = array();
+          foreach( $myVec as $myValue) {
+            array_push($myTerms, $myValue->name);
+          }
+          if(! empty( $myTerms) ) {
+            $myContent[$key]=$myTerms;
+          }
+          break;
+
+
         default:
+          drush_print("KEY :".$key);
+          drush_print("VAL :".$val['type']);
+          drush_print_r($w->$key->value());
+
           # Log unhandled fields. Eventually this should be an error
           watchdog("cybcom", "Unhandled field ".$key." of type ".$val[type]);
           ;
