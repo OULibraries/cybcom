@@ -49,45 +49,31 @@ function cybcom_menu() {
  */
 
 function cybcom_mintxml($nid) {
+  watchdog('cybcom', "mintxml called for node ". $id->nid );
 
   try {
+    # load data to mint
+    $nd = entity_load_single('node', $nid);
+    $bd = $nd->type;
+    $w = entity_metadata_wrapper("node", $nd, array('bundle' => $bd));
 
-    $w = entity_metadata_wrapper("node", $nid, array('bundle' => 'item'));
-
-
-    watchdog('cybcom', "mintxml called for node ". $id->nid );
-
+    # get config
     $cybcom_xmlurl = variable_get('cybcom_xmlurl', "");
     $cybcom_token = variable_get('cybcom_token', "");
 
-    $my_data = _cybcom_wrap2array($w);
+    # structure as array for cybercommons
+    $cybcom_data = _cybcom_wrap2array($w);
 
-    $cyb_client = new GuzzleHttp\Client([
-                    'defaults' => [
-                      'headers' => [
-                        'Content-Type'=>'application/json',
-                        "Authorization"=>"Token ".$cybcom_token,
-                      ]]]);
+    #send to cyber commonds
+    $response = _send2cybcom($cybcom_xmlurl, $cybcom_token, "speccoll.tmpl", $cybcom_data);
 
-    $cyb_body = [
-      "function"=>"xmlgenq.tasks.xmltemplate.metadataTemplateCreation",
-      "queue"=>"celery",
-      "args" => [
-        $my_data,
-      ],
-      "kwargs"=> [
-        "templatename"=>"speccoll.tmpl",
-        "outname"=>"example.xml"
-      ],
-      "tags"=> ["example.xml"],
-    ];
+    # save resonse url
+    $task= $response->json();
 
-    $response = $cyb_client->post(
-      $cybcom_xmlurl."/api/queue/run/xmlgenq.tasks.xmltemplate.metadataTemplateCreation/.json",
-      ['body' => json_encode($cyb_body),]
-    );
 
-    return  $response->json();
+     $w->field_cybcom_task->set($task['task_id'] );
+     $w->field_cybcom_task_uri->set( array( 'url'=>$task['result_url']));
+     $w->save();
 
   } catch (EntityMetadataWrapperException $exc) {
     watchdog(
@@ -161,6 +147,26 @@ function _cybcom_wrap2array($w) {
         break;
 
 
+      case "date":
+        $myValue = $w->$key->value();
+        if(! empty(  $myValue )) {
+          $myContent[$key]=date(DATE_RFC2822, $myValue);
+        }
+
+      case "list<date>":
+        $myVec = $w->$key->value();
+        if(is_array($myVec)) {break;} // Bad style?
+        $myDates = array();
+        foreach( $myVec as $myTS) {
+          array_push($myDates, date(DATE_RFC2822. $myTS));
+        }
+        if(! empty( $myTerms) ) {
+          $myContent[$key]=$myDates;
+        }
+        break;
+
+
+
       default:
         drush_print("KEY :".$key);
         drush_print("VAL :".$val['type']);
@@ -172,4 +178,37 @@ function _cybcom_wrap2array($w) {
     }
   }
 return $myContent;
+}
+
+
+
+function _send2cybcom($cybcom_xmlurl, $cybcom_token, $cybcom_template, $cybcom_data) {
+
+  $cyb_client = new GuzzleHttp\Client([
+                  'defaults' => [
+                    'headers' => [
+                      'Content-Type'=>'application/json',
+                      "Authorization"=>"Token ".$cybcom_token,
+                    ]]]);
+
+  $cyb_body = [
+    "function"=>"xmlgenq.tasks.xmltemplate.metadataTemplateCreation",
+    "queue"=>"celery",
+    "args" => [
+      $cybcom_data,
+    ],
+    "kwargs"=> [
+      "templatename"=>$cybcom_template,
+      "outname"=>$cybcom_template.".xml"
+    ],
+    "tags"=> ["example.xml"],
+  ];
+
+  $response = $cyb_client->post(
+    $cybcom_xmlurl."/api/queue/run/xmlgenq.tasks.xmltemplate.metadataTemplateCreation/.json",
+    ['body' => json_encode($cyb_body),]
+  );
+
+
+  return $response;
 }
