@@ -44,10 +44,35 @@ function cybcom_menu() {
 }
 
 
+function cybcom_menu_alter(&$items) {
+  // $node = menu_get_object();
+  // if ($node->type != "item") {return true; }
+
+  $items['node/%node/cybcom'] = array (
+    'title' =>"Cybercommons Data",
+    'access callback' => 'node_access',
+    'access arguments' => array('update', 1),
+    'type' => MENU_LOCAL_TASK,
+    'page callback' => '_cybcom_loadNodeHtml',
+    'page arguments' => array(1)
+  );
+
+ $items['node/%node/cybcom/json'] = array (
+    'title' =>"Cybercommons Data",
+    'access callback' => 'node_access',
+    'access arguments' => array('update', 1),
+    'type' => MENU_LOCAL_TASK,
+    'page callback' => '_cybcom_loadNode',
+    'page arguments' => array(1),
+    'delivery callback' => 'drupal_json_output',
+  );
+
+}
+
+
 /**
  *  Post to cybercommns to get XML representation of node
  */
-
 function cybcom_mintxml($nid) {
   watchdog('cybcom', "mintxml called for node ". $id->nid );
 
@@ -71,9 +96,9 @@ function cybcom_mintxml($nid) {
     $task= $response->json();
 
 
-     $w->field_cybcom_task->set($task['task_id'] );
-     $w->field_cybcom_task_uri->set( array( 'url'=>$task['result_url']));
-     $w->save();
+    $w->field_cybcom_task->set($task['task_id'] );
+    $w->field_cybcom_task_uri->set( array( 'url'=>$task['result_url']));
+    $w->save();
 
   } catch (EntityMetadataWrapperException $exc) {
     watchdog(
@@ -86,6 +111,44 @@ function cybcom_mintxml($nid) {
 
 
 }
+
+
+function _cybcom_loadNode($node) {
+
+ try {
+   $nid = $node->nid;
+   # load data to mint
+   $nd = entity_load_single('node', $nid);
+   $bd = $nd->type;
+   $w = entity_metadata_wrapper("node", $nd, array('bundle' => $bd));
+
+   return _cybcom_wrap2array($w);
+
+  } catch (EntityMetadataWrapperException $exc) {
+    watchdog(
+      'cybcom',
+      'EntityMetadataWrapper exception in %function() <pre>@trace</pre>',
+      array('%function' => __FUNCTION__, '@trace' => $exc->getTraceAsString()),
+      WATCHDOG_ERROR
+    );
+  }
+}
+
+function _cybcom_loadNodeHtml($node) {
+
+  $ccArray = _cybcom_loadNode($node);
+  ddl($ccArray);
+  $output = array(
+    'header' => array(
+      '#type' => 'markup',
+      '#markup' => '<p>Data to send to CyberCommons</p>',
+    ),
+  );
+  return $output;
+}
+
+
+
 
 
 function _cybcom_wrap2array($w) {
@@ -165,15 +228,9 @@ function _cybcom_wrap2array($w) {
         }
         break;
 
-
-
       default:
-        drush_print("KEY :".$key);
-        drush_print("VAL :".$val['type']);
-        drush_print_r($w->$key->value());
-
         # Log unhandled fields. Eventually this should be an error
-        watchdog("cybcom", "Unhandled field ".$key." of type ".$val[type]);
+        watchdog("cybcom", "Unhandled field ".$key);
         ;
     }
   }
