@@ -1,7 +1,7 @@
 <?php
 
 /**
- *
+ *  Implements hook_admin
  */
 function cybcom_admin() {
   $form = array();
@@ -23,7 +23,6 @@ function cybcom_admin() {
   return system_settings_form($form);
 }
 
-
 /**
  *  Implements hook_menu()
  */
@@ -40,35 +39,43 @@ function cybcom_menu() {
     'type' => MENU_NORMAL_ITEM,
   );
 
-  return $items;
-}
-
-
-function cybcom_menu_alter(&$items) {
-  // $node = menu_get_object();
-  // if ($node->type != "item") {return true; }
-
-  $items['node/%node/cybcom'] = array (
-    'title' =>"Cybercommons Data",
-    'access callback' => 'node_access',
-    'access arguments' => array('update', 1),
+  $items['node/%cybcom_menu/cybcom/preview'] = array (
+    'title' =>"JSON Preview" ,
     'type' => MENU_LOCAL_TASK,
     'page callback' => '_cybcom_loadNodeHtml',
-    'page arguments' => array(1)
-  );
-
- $items['node/%node/cybcom/json'] = array (
-    'title' =>"Cybercommons Data",
+    'page arguments' => array(1),
     'access callback' => 'node_access',
     'access arguments' => array('update', 1),
-    'type' => MENU_LOCAL_TASK,
-    'page callback' => '_cybcom_loadNode',
-    'page arguments' => array(1),
-    'delivery callback' => 'drupal_json_output',
+
   );
 
+ $items['node/%cybcom_menu/cybcom/json'] = array (
+   'title' =>"JSON" ,
+   'type' => MENU_NORMAL_ITEM,
+   'page callback' => '_cybcom_loadNode',
+   'page arguments' => array(1),
+   'access callback' => 'node_access',
+   'access arguments' => array('update', 1),
+   'delivery callback' => 'drupal_json_output',
+ );
+
+ return $items;
 }
 
+
+/**
+ * Menu loader callback.
+ */
+function cybcom_menu_load($nid) {
+  if (!is_numeric($nid)) {
+    return FALSE;
+  }
+  $node = node_load($nid);
+  if($node->type == 'item') {
+    return $node;
+  }
+  return FALSE;
+}
 
 /**
  *  Post to cybercommns to get XML representation of node
@@ -137,19 +144,22 @@ function _cybcom_loadNode($node) {
 function _cybcom_loadNodeHtml($node) {
 
   $ccArray = _cybcom_loadNode($node);
-  ddl($ccArray);
+
+  $ccArrayMarkup  = '<pre>';
+  $ccArrayMarkup .= htmlspecialchars(json_encode($ccArray, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+  # We don't want escaped slashes because it looks weird when we turn things in to html
+  $ccArrayMarkup .='</pre>';
+
   $output = array(
-    'header' => array(
+    'content'=> array(
       '#type' => 'markup',
-      '#markup' => '<p>Data to send to CyberCommons</p>',
-    ),
+      '#markup' => $ccArrayMarkup,
+    )
+
+
   );
   return $output;
 }
-
-
-
-
 
 function _cybcom_wrap2array($w) {
   $myContent=array();
@@ -218,7 +228,8 @@ function _cybcom_wrap2array($w) {
 
       case "list<date>":
         $myVec = $w->$key->value();
-        if(is_array($myVec)) {break;} // Bad style?
+        if(! is_array($myVec)) {break;} // Bad style?
+
         $myDates = array();
         foreach( $myVec as $myTS) {
           array_push($myDates, date(DATE_RFC2822. $myTS));
