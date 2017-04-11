@@ -84,38 +84,44 @@ function cybcom_mintxml($nid) {
   watchdog('cybcom', "mintxml called for node ". $nid );
 
   try {
-    # load data to mint
+    // load data to mint
     $nd = entity_load_single('node', $nid);
     $bd = $nd->type;
     $w = entity_metadata_wrapper("node", $nd, array('bundle' => $bd));
 
-    # get config
+    // get config
     $cybcom_xmlurl = variable_get('cybcom_xmlurl', "");
     $cybcom_token = variable_get('cybcom_token', "");
 
-    # structure as array for cybercommons
+    // structure as array for cybercommons
     $cybcom_data = _cybcom_wrap2array($w);
 
-    #send to cyber commonds
+    //send to cyber commonds
     $response = _send2cybcom($cybcom_xmlurl, $cybcom_token, "speccoll.tmpl", $cybcom_data);
 
-    # save resonse url
+    // save resonse url
     $task= $response->json();
-
-
     $w->field_cybcom_task->set($task['task_id'] );
     $w->field_cybcom_task_uri->set( array( 'url'=>$task['result_url']));
     $w->save();
 
-  } catch (EntityMetadataWrapperException $exc) {
+  } catch (EntityMetadataWrapperException $e) {
     watchdog(
       'cybcom',
       'EntityMetadataWrapper exception in %function() <pre>@trace</pre>',
-      array('%function' => __FUNCTION__, '@trace' => $exc->getTraceAsString()),
+      array('%function' => __FUNCTION__, '@trace' => $e->getTraceAsString()),
+      WATCHDOG_ERROR
+    );
+    var_dump($e->getTrace());
+
+  } catch(GuzzleHttp\Exception\TransferException $e) {
+    watchdog('cybcom',
+      "Trouble sending data to Cyber Commons %nid",
+      'Guzzle exception in %function() <pre>@trace</pre>',
+      array('%function' => __FUNCTION__, '@trace' => $e->getTraceAsString()),
       WATCHDOG_ERROR
     );
   }
-
 
 }
 
@@ -124,18 +130,18 @@ function _cybcom_loadNode($node) {
 
  try {
    $nid = $node->nid;
-   # load data to mint
+   // load data to mint
    $nd = entity_load_single('node', $nid);
    $bd = $nd->type;
    $w = entity_metadata_wrapper("node", $nd, array('bundle' => $bd));
 
    return _cybcom_wrap2array($w);
 
-  } catch (EntityMetadataWrapperException $exc) {
+  } catch (EntityMetadataWrapperException $e) {
     watchdog(
       'cybcom',
       'EntityMetadataWrapper exception in %function() <pre>@trace</pre>',
-      array('%function' => __FUNCTION__, '@trace' => $exc->getTraceAsString()),
+      array('%function' => __FUNCTION__, '@trace' => $e->getTraceAsString()),
       WATCHDOG_ERROR
     );
   }
@@ -147,7 +153,7 @@ function _cybcom_loadNodeHtml($node) {
 
   $ccArrayMarkup  = '<pre>';
   $ccArrayMarkup .= htmlspecialchars(json_encode($ccArray, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-  # We don't want escaped slashes because it looks weird when we turn things in to html
+  // We don't want escaped slashes because it looks weird when we turn things in to html
   $ccArrayMarkup .='</pre>';
 
   $output = array(
@@ -165,39 +171,38 @@ function _cybcom_wrap2array($w) {
   $myContent=array();
 
   foreach ($w->getPropertyInfo() as $key => $val) {
+    // $key will be a field name from the item content type
+    // $val will be the (structured) content of that field,
 
-    # $key will be a field name fromt he content type
-    # $val will be the (structured) content of that field,
-
-    if("field_creator_info" == $key) {
-      $creators = $w->$key;
-
-      $myCreators = array();
-      foreach( $creators as $creator) {
-        $myCreator = array();
-
-        # TODO This should probably handle errors better
-
-        $myCreator['field_creator_type'] =@ $creator->field_creator_type->value()->name ?: "";
-        $myCreator['field_creator_source'] =@ $creator->field_creator_source->value()->name ?: "";
-        $myCreator['field_creator_source_corp'] =@ $creator->field_creator_source->value()->name ?: "";
-        $myCreator['field_creator_person_lcnaf'] =@ $creator->field_creator_person_lcnaf->value() ?: "";
-        $myCreator['field_creator_local_'] =@ $creator->field_creator_local_->value() ?: "";
-        $myCreator['field_creator_role'] =@ $creator->field_creator_role->value()->name ?: "";
-        $myCreator['field_corporate_name_lcnaf_'] =@ $creator->field_corporate_name_lcnaf_->value() ?: "";
-        $myCreator['field_corporate_name_local_'] =@ $creator->field_corporate_name_local_->value() ?: "";
-        $myCreator['field_conference_name'] =@ $creator->field_conference_name->value() ?: "";
-        array_push($myCreators, $myCreator);
-
+    // For Drupal nodes, "title" isn't a normal entity field
+    if("title" == $key) {
+      $myValue = $w->$key->value();
+      if(! empty(  $myValue )) {
+        $myContent["title"]=$myValue;
       }
-      $myContent[$key] = $myCreators;
       continue;
     }
 
+    // If it isn't an entity field or a special case that we've already handled,
+    // it's probably a Drupal enternal that we should skip
+    if(! preg_match('/field_.*/', $key)) {
+      continue;
+    }
+
+    // Don't worry about cybercom response fields, either
+    if( preg_match('/field_cybcom_task.*/', $key)) {
+      continue;
+    }
+
+    // field_name could be a field name but it could also be the parent field of
+    // a field collection, so we might ignore it
+    if("field_name" ==$key && ! isset( $val->field)) {
+      continue;
+    }
 
     switch( $val['type'] )  {
 
-      # Handle single and multi-value text fields.
+      // Handle single and multi-value text fields.
       case "integer":
       case "boolean":
       case "text":
@@ -240,16 +245,57 @@ function _cybcom_wrap2array($w) {
         foreach( $myVec as $myTS) {
           array_push($myDates, date(DATE_RFC2822. $myTS));
         }
-        if(! empty( $myTerms) ) {
+        if(! empty( $myDates) ) {
           $myContent[$key]=$myDates;
         }
         break;
 
+      case "list<node>":
+      case (preg_match('/list<field_collection_.*/', $val['type']) ? $val['type'] : !$val['type'] ) :
+        $myVec = $w->$key;
+
+        $myColls = array();
+        foreach( $myVec as $collection) {
+          $myCollection  = _cybcom_wrap2array($collection);
+          array_push($myColls , $myCollection);
+        }
+
+        if(! empty( $myColls) ) {
+          $myContent[$key] = $myColls;
+        }
+
+        break;
+
+      case (preg_match('/list<field_.*_link>/', $val['type']) ? $val['type'] : !$val['type'] ) :
+        $myVec = $w->$key;
+
+        $myLinks = array();
+        foreach($myVec as $link) {
+          $myLink = array();
+          if( $link->raw() ) {
+            $myLink=$link->value();
+            unset($myLink['attributes']); // Get rid of context-specific attributes
+          }
+          array_push($myLinks, $myLink);
+        }
+        $myContent[$key] = $myLinks;
+        break;
+
+     case (preg_match('/field_.*_link/', $val['type']) ? $val['type'] : !$val['type'] ) :
+        $myLink = array();
+        if( $w->$key->raw() ) {
+          $myLink=$w->$key->value();
+          unset($myLink['attributes']); // Get rid of context-specific attributes
+        }
+        $myContent[$key] = $myLink;
+        break;
+
+
       default:
-        # Log unhandled fields. Eventually this should be an error
+        // Log unhandled fields. Eventually this should be an error
         watchdog("cybcom",
-          "Unhandled field %field of type %type in node %nid.",
-          array("%field"=>$key, "%nid" => $w->nid->value(), "%type"=> $val['type']  )
+          "Unhandled field %field of type %type in entity %eid.",
+          array("%field"=>$key, "%eid" => $w->getIdentifier(), "%type"=> $val['type']  )
         );
     }
   }
