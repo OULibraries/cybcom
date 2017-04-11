@@ -81,7 +81,7 @@ function cybcom_menu_load($nid) {
  *  Post to cybercommns to get XML representation of node
  */
 function cybcom_mintxml($nid) {
-  watchdog('cybcom', "mintxml called for node ". $id->nid );
+  watchdog('cybcom', "mintxml called for node ". $nid );
 
   try {
     # load data to mint
@@ -166,27 +166,34 @@ function _cybcom_wrap2array($w) {
 
   foreach ($w->getPropertyInfo() as $key => $val) {
 
-    #
-    # Delete special case when template moves from field_title to title
-    #
-    if("title" == $key) {
-      $myValue = $w->$key->value();
-      if(! empty(  $myValue )) {
-        $myContent["title"]=$myValue;
+    # $key will be a field name fromt he content type
+    # $val will be the (structured) content of that field,
+
+    if("field_creator_info" == $key) {
+      $creators = $w->$key;
+
+      $myCreators = array();
+      foreach( $creators as $creator) {
+        $myCreator = array();
+
+        # TODO This should probably handle errors better
+
+        $myCreator['field_creator_type'] =@ $creator->field_creator_type->value()->name ?: "";
+        $myCreator['field_creator_source'] =@ $creator->field_creator_source->value()->name ?: "";
+        $myCreator['field_creator_source_corp'] =@ $creator->field_creator_source->value()->name ?: "";
+        $myCreator['field_creator_person_lcnaf'] =@ $creator->field_creator_person_lcnaf->value() ?: "";
+        $myCreator['field_creator_local_'] =@ $creator->field_creator_local_->value() ?: "";
+        $myCreator['field_creator_role'] =@ $creator->field_creator_role->value()->name ?: "";
+        $myCreator['field_corporate_name_lcnaf_'] =@ $creator->field_corporate_name_lcnaf_->value() ?: "";
+        $myCreator['field_corporate_name_local_'] =@ $creator->field_corporate_name_local_->value() ?: "";
+        $myCreator['field_conference_name'] =@ $creator->field_conference_name->value() ?: "";
+        array_push($myCreators, $myCreator);
+
       }
+      $myContent[$key] = $myCreators;
       continue;
     }
 
-    #
-    # Delete special case when template fixes spelling of field_alternative
-    #
-    if("field_alternate" == $key) {
-      $myValue = $w->$key->value();
-      if(! empty(  $myValue )) {
-        $myContent["field_alternative"]=$myValue;
-      }
-      continue;
-    }
 
     switch( $val['type'] )  {
 
@@ -219,7 +226,6 @@ function _cybcom_wrap2array($w) {
         }
         break;
 
-
       case "date":
         $myValue = $w->$key->value();
         if(! empty(  $myValue )) {
@@ -241,8 +247,10 @@ function _cybcom_wrap2array($w) {
 
       default:
         # Log unhandled fields. Eventually this should be an error
-        watchdog("cybcom", "Unhandled field ".$key);
-        ;
+        watchdog("cybcom",
+          "Unhandled field %field of type %type in node %nid.",
+          array("%field"=>$key, "%nid" => $w->nid->value(), "%type"=> $val['type']  )
+        );
     }
   }
 return $myContent;
