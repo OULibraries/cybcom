@@ -96,6 +96,13 @@ function cybcom_mintxml($nid) {
     // load data to mint
     $nd = entity_load_single('node', $nid);
     $bd = $nd->type;
+
+    // do some validation
+    if( $bd != "item") {
+      watchdog('cybcom', "Tried to mint invalid node type". $nid );
+      return;
+    }
+
     $w = entity_metadata_wrapper("node", $nd, array('bundle' => $bd));
 
     // get config
