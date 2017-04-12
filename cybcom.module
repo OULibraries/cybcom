@@ -122,7 +122,6 @@ function cybcom_mintxml($nid) {
       WATCHDOG_ERROR
     );
   }
-
 }
 
 
@@ -266,7 +265,7 @@ function _cybcom_wrap2array($w) {
 
         break;
 
-     case (preg_match('/field_.*_link/', $field_props['type']) ? $field_props['type'] : !$field_props['type'] ) :
+      case (preg_match('/field_.*_link/', $field_props['type']) ? $field_props['type'] : !$field_props['type'] ) :
         $myLink = array();
         if( $w->$field_name->raw() ) {
           $myLink=$w->$field_name->value();
