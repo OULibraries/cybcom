@@ -193,7 +193,7 @@ function _cybcom_wrap2array($w) {
 
     // field_name could be a field name but it could also be the parent field of
     // a field collection, so we might ignore it
-    if("field_name" ==$field_name && ! isset( $field_props->field)) {
+    if("field_name" == $field_name && ! isset( $field_props->field)) {
       continue;
     }
 
