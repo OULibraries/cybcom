@@ -1,6 +1,12 @@
 <?php
 
 /**
+ * @file
+ * This module provides tools for publishing Drupal content into a CyberCommons
+ * site.
+ */
+
+/**
  *  Implements hook_admin
  */
 function cybcom_admin() {
@@ -27,9 +33,9 @@ function cybcom_admin() {
  *  Implements hook_menu()
  */
 function cybcom_menu() {
-
   $items = array();
 
+  // Admin Settings
   $items['admin/config/cybcom'] = array(
     'title' => 'CyberCommons Settings',
     'description' => 'Lorem ipsum dolor sit amet',
@@ -39,6 +45,7 @@ function cybcom_menu() {
     'type' => MENU_NORMAL_ITEM,
   );
 
+  // JSON preview of how content will be sent to Cyber Commons
   $items['node/%cybcom_menu/cybcom/preview'] = array (
     'title' =>"JSON Preview" ,
     'type' => MENU_LOCAL_TASK,
@@ -49,22 +56,24 @@ function cybcom_menu() {
 
   );
 
- $items['node/%cybcom_menu/cybcom/json'] = array (
-   'title' =>"JSON" ,
-   'type' => MENU_NORMAL_ITEM,
-   'page callback' => '_cybcom_loadNode',
-   'page arguments' => array(1),
-   'access callback' => 'node_access',
-   'access arguments' => array('update', 1),
-   'delivery callback' => 'drupal_json_output',
- );
+  // Json representation of node
+  $items['node/%cybcom_menu/cybcom/json'] = array (
+    'title' =>"JSON" ,
+    'type' => MENU_NORMAL_ITEM,
+    'page callback' => '_cybcom_loadNode',
+    'page arguments' => array(1),
+    'access callback' => 'node_access',
+    'access arguments' => array('update', 1),
+    'delivery callback' => 'drupal_json_output',
+  );
 
- return $items;
+  return $items;
 }
 
 
 /**
- * Menu loader callback.
+ * Menu loader callback to ensure CyberCommons menu routes only apply to item
+ * nodes.
  */
 function cybcom_menu_load($nid) {
   if (!is_numeric($nid)) {
@@ -96,7 +105,7 @@ function cybcom_mintxml($nid) {
     // structure as array for cybercommons
     $cybcom_data = _cybcom_wrap2array($w);
 
-    //send to cyber commonds
+    //send data to cyber commons
     $response = _send2cybcom($cybcom_xmlurl, $cybcom_token, "speccoll.tmpl", $cybcom_data);
 
     // save resonse url
@@ -112,7 +121,6 @@ function cybcom_mintxml($nid) {
       array('%function' => __FUNCTION__, '@trace' => $e->getTraceAsString()),
       WATCHDOG_ERROR
     );
-    var_dump($e->getTrace());
 
   } catch(GuzzleHttp\Exception\TransferException $e) {
     watchdog('cybcom',
@@ -124,17 +132,19 @@ function cybcom_mintxml($nid) {
   }
 }
 
-
+/**
+ * Load node content into CyberCommons array structure.
+ */
 function _cybcom_loadNode($node) {
 
- try {
-   $nid = $node->nid;
-   // load data to mint
-   $nd = entity_load_single('node', $nid);
-   $bd = $nd->type;
-   $w = entity_metadata_wrapper("node", $nd, array('bundle' => $bd));
+  try {
+    $nid = $node->nid;
+    // load data to mint
+    $nd = entity_load_single('node', $nid);
+    $bd = $nd->type;
+    $w = entity_metadata_wrapper("node", $nd, array('bundle' => $bd));
 
-   return _cybcom_wrap2array($w);
+    return _cybcom_wrap2array($w);
 
   } catch (EntityMetadataWrapperException $e) {
     watchdog(
@@ -146,6 +156,9 @@ function _cybcom_loadNode($node) {
   }
 }
 
+/**
+ * Load node content as html view of JSON
+ */
 function _cybcom_loadNodeHtml($node) {
 
   $ccArray = _cybcom_loadNode($node);
@@ -166,17 +179,20 @@ function _cybcom_loadNodeHtml($node) {
   return $output;
 }
 
+/**
+ * Convert Entity Metadata Wrapper to simplified array suitable for
+ * jsonification.
+ */
 function _cybcom_wrap2array($w) {
   $myContent=array();
 
   foreach ($w->getPropertyInfo() as $field_name => $field_props) {
 
-    // For Drupal nodes, "title" isn't a normal entity field
+    // For Drupal nodes, "title" isn't a normal entity field,
     if("title" == $field_name) {
       $myVal = $w->$field_name->value();
-      if(! empty(  $myVal )) {
-        $myContent["title"]=$myVal;
-      }
+      if( empty(  $myVal )) { continue;}
+      $myContent["title"]=$myVal;
       continue;
     }
 
@@ -197,9 +213,11 @@ function _cybcom_wrap2array($w) {
       continue;
     }
 
+
+    // For fields that aren't special cases, we'll process them all by type.
     switch( $field_props['type'] )  {
 
-      // Handle single and multi-value text fields.
+      // Get single and multi-value text fields.
       case "integer":
       case "boolean":
       case "text":
@@ -210,6 +228,7 @@ function _cybcom_wrap2array($w) {
         $myContent[$field_name]=$myVal;
         break;
 
+      // Get the term name for taxonomy terms
       case "taxonomy_term":
         $myVal = $w->$field_name->value();
         if( empty(  $myVal )) {break; }
@@ -225,6 +244,7 @@ function _cybcom_wrap2array($w) {
         $myContent[$field_name] = array_map( $getName , $myVec);
         break;
 
+      // Get an ISO 8601 string representation of Drupal date fields
       case "date":
         $myVal = $w->$field_name->value();
         if( empty($myVec)) { break; }
@@ -240,6 +260,7 @@ function _cybcom_wrap2array($w) {
         $myContent[$field_name] = array_map($getDate, $myVec);
         break;
 
+      // Process structured entities recursively
       case "list<node>":
       case (preg_match('/list<field_collection_.*/', $field_props['type']) ? $field_props['type'] : !$field_props['type'] ) :
         $myVec = iterator_to_array($w->$field_name);
@@ -249,6 +270,7 @@ function _cybcom_wrap2array($w) {
         $myContent[$field_name] = array_map( $getArr, $myVec);
         break;
 
+      // Get properties of url fields
       case (preg_match('/list<field_.*_link>/', $field_props['type']) ? $field_props['type'] : !$field_props['type'] ) :
         $myVec = iterator_to_array($w->$field_name);
         if( empty( $myVec)) {break;}
@@ -274,20 +296,20 @@ function _cybcom_wrap2array($w) {
         $myContent[$field_name] = $myLink;
         break;
 
-
+      // Log unhandled fields.
       default:
-        // Log unhandled fields. Eventually this should be an error
         watchdog("cybcom",
           "Unhandled field %field of type %type in entity %eid.",
           array("%field"=>$field_name, "%eid" => $w->getIdentifier(), "%type"=> $field_props['type']  )
         );
     }
   }
-return $myContent;
+  return $myContent;
 }
 
-
-
+/**
+ * POST array data to a CyberCommons site for rendering in to xml
+ */
 function _send2cybcom($cybcom_xmlurl, $cybcom_token, $cybcom_template, $cybcom_data) {
 
   $cyb_client = new GuzzleHttp\Client([
