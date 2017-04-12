@@ -208,77 +208,64 @@ function _cybcom_wrap2array($w) {
       case "text":
       case "list<text>":
         $myValue = $w->$key->value();
-        if(! empty(  $myValue )) {
-          $myContent[$key]=$myValue;
-        }
+        if( empty(  $myValue )) { break; }
+
+        $myContent[$key]=$myValue;
         break;
 
       case "taxonomy_term":
         $myValue = $w->$key->value();
-        if(! empty(  $myValue )) {
-          $myContent[$key]=$myValue->name;
-        }
+        if( empty(  $myValue )) {break; }
+
+        $myContent[$key]=$myValue->name;
         break;
 
       case "list<taxonomy_term>":
         $myVec = $w->$key->value();
-        $myTerms = array();
-        foreach( $myVec as $myValue) {
-          array_push($myTerms, $myValue->name);
-        }
-        if(! empty( $myTerms) ) {
-          $myContent[$key]=$myTerms;
-        }
+        if( empty($myVec)) { break; }
+
+        $getName = function($i) { return $i->name ; };
+        $myContent[$key] = array_map( $getName , $myVec);
         break;
 
       case "date":
         $myValue = $w->$key->value();
-        if(! empty(  $myValue )) {
-          $myContent[$key]=date(DATE_RFC2822, $myValue);
-        }
+        if( empty($myVec)) { break; }
+
+        $myContent[$key]=date(DATE_ATOM, $myValue);
+        break;
 
       case "list<date>":
         $myVec = $w->$key->value();
-        if(! is_array($myVec)) {break;} // Bad style?
+        if( empty( $myVec)) {break;}
 
-        $myDates = array();
-        foreach( $myVec as $myTS) {
-          array_push($myDates, date(DATE_RFC2822. $myTS));
-        }
-        if(! empty( $myDates) ) {
-          $myContent[$key]=$myDates;
-        }
+        $getDate = function($i) { return date(DATE_ATOM, $i); };
+        $myContent[$key] = array_map($getDate, $myVec);
         break;
 
       case "list<node>":
       case (preg_match('/list<field_collection_.*/', $val['type']) ? $val['type'] : !$val['type'] ) :
-        $myVec = $w->$key;
+        $myVec = iterator_to_array($w->$key);
+        if( empty( $myVec)) {break;}
 
-        $myColls = array();
-        foreach( $myVec as $collection) {
-          $myCollection  = _cybcom_wrap2array($collection);
-          array_push($myColls , $myCollection);
-        }
-
-        if(! empty( $myColls) ) {
-          $myContent[$key] = $myColls;
-        }
-
+        $getArr = function($i) { return _cybcom_wrap2array($i);};
+        $myContent[$key] = array_map( $getArr, $myVec);
         break;
 
       case (preg_match('/list<field_.*_link>/', $val['type']) ? $val['type'] : !$val['type'] ) :
-        $myVec = $w->$key;
+        $myVec = iterator_to_array($w->$key);
+        if( empty( $myVec)) {break;}
 
-        $myLinks = array();
-        foreach($myVec as $link) {
+        $getLink = function ($i) {
           $myLink = array();
-          if( $link->raw() ) {
-            $myLink=$link->value();
+          if( $i->raw() ) {
+            $myLink=$i->value();
             unset($myLink['attributes']); // Get rid of context-specific attributes
           }
-          array_push($myLinks, $myLink);
-        }
-        $myContent[$key] = $myLinks;
+          return $myLink;
+        };
+        $myContent[$key] = array_map( $getLink, $myVec);
+
         break;
 
      case (preg_match('/field_.*_link/', $val['type']) ? $val['type'] : !$val['type'] ) :
