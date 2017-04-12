@@ -170,90 +170,88 @@ function _cybcom_loadNodeHtml($node) {
 function _cybcom_wrap2array($w) {
   $myContent=array();
 
-  foreach ($w->getPropertyInfo() as $key => $val) {
-    // $key will be a field name from the item content type
-    // $val will be the (structured) content of that field,
+  foreach ($w->getPropertyInfo() as $field_name => $field_props) {
 
     // For Drupal nodes, "title" isn't a normal entity field
-    if("title" == $key) {
-      $myValue = $w->$key->value();
-      if(! empty(  $myValue )) {
-        $myContent["title"]=$myValue;
+    if("title" == $field_name) {
+      $myVal = $w->$field_name->value();
+      if(! empty(  $myVal )) {
+        $myContent["title"]=$myVal;
       }
       continue;
     }
 
     // If it isn't an entity field or a special case that we've already handled,
     // it's probably a Drupal enternal that we should skip
-    if(! preg_match('/field_.*/', $key)) {
+    if(! preg_match('/field_.*/', $field_name)) {
       continue;
     }
 
     // Don't worry about cybercom response fields, either
-    if( preg_match('/field_cybcom_task.*/', $key)) {
+    if( preg_match('/field_cybcom_task.*/', $field_name)) {
       continue;
     }
 
     // field_name could be a field name but it could also be the parent field of
     // a field collection, so we might ignore it
-    if("field_name" ==$key && ! isset( $val->field)) {
+    if("field_name" ==$field_name && ! isset( $field_props->field)) {
       continue;
     }
 
-    switch( $val['type'] )  {
+    switch( $field_props['type'] )  {
 
       // Handle single and multi-value text fields.
       case "integer":
       case "boolean":
       case "text":
       case "list<text>":
-        $myValue = $w->$key->value();
-        if( empty(  $myValue )) { break; }
+        $myVal = $w->$field_name->value();
+        if( empty(  $myVal )) { break; }
 
-        $myContent[$key]=$myValue;
+        $myContent[$field_name]=$myVal;
         break;
 
       case "taxonomy_term":
-        $myValue = $w->$key->value();
-        if( empty(  $myValue )) {break; }
+        $myVal = $w->$field_name->value();
+        if( empty(  $myVal )) {break; }
 
-        $myContent[$key]=$myValue->name;
+        $myContent[$field_name]=$myVal->name;
         break;
 
       case "list<taxonomy_term>":
-        $myVec = $w->$key->value();
+        $myVec = $w->$field_name->value();
         if( empty($myVec)) { break; }
 
         $getName = function($i) { return $i->name ; };
-        $myContent[$key] = array_map( $getName , $myVec);
+        $myContent[$field_name] = array_map( $getName , $myVec);
         break;
 
       case "date":
-        $myValue = $w->$key->value();
+        $myVal = $w->$field_name->value();
         if( empty($myVec)) { break; }
 
-        $myContent[$key]=date(DATE_ATOM, $myValue);
+        $myContent[$field_name]=date(DATE_ATOM, $myVal);
         break;
 
       case "list<date>":
-        $myVec = $w->$key->value();
+        $myVec = $w->$field_name->value();
         if( empty( $myVec)) {break;}
 
         $getDate = function($i) { return date(DATE_ATOM, $i); };
-        $myContent[$key] = array_map($getDate, $myVec);
+        $myContent[$field_name] = array_map($getDate, $myVec);
         break;
 
       case "list<node>":
-      case (preg_match('/list<field_collection_.*/', $val['type']) ? $val['type'] : !$val['type'] ) :
-        $myVec = iterator_to_array($w->$key);
+      case (preg_match('/list<field_collection_.*/', $field_props['type']) ? $field_props['type'] : !$field_props['type'] ) :
+        $myVec = iterator_to_array($w->$field_name);
         if( empty( $myVec)) {break;}
 
         $getArr = function($i) { return _cybcom_wrap2array($i);};
-        $myContent[$key] = array_map( $getArr, $myVec);
+        $myContent[$field_name] = array_map( $getArr, $myVec);
         break;
 
-      case (preg_match('/list<field_.*_link>/', $val['type']) ? $val['type'] : !$val['type'] ) :
-        $myVec = iterator_to_array($w->$key);
+      case (preg_match('/list<field_.*_link>/', $field_props['type']) ? $field_props['type'] : !$field_props['type'] ) :
+        $myVec = iterator_to_array($w->$field_name);
         if( empty( $myVec)) {break;}
 
         $getLink = function ($i) {
@@ -264,17 +262,17 @@ function _cybcom_wrap2array($w) {
           }
           return $myLink;
         };
-        $myContent[$key] = array_map( $getLink, $myVec);
+        $myContent[$field_name] = array_map( $getLink, $myVec);
 
         break;
 
-     case (preg_match('/field_.*_link/', $val['type']) ? $val['type'] : !$val['type'] ) :
+     case (preg_match('/field_.*_link/', $field_props['type']) ? $field_props['type'] : !$field_props['type'] ) :
         $myLink = array();
-        if( $w->$key->raw() ) {
-          $myLink=$w->$key->value();
+        if( $w->$field_name->raw() ) {
+          $myLink=$w->$field_name->value();
           unset($myLink['attributes']); // Get rid of context-specific attributes
         }
-        $myContent[$key] = $myLink;
+        $myContent[$field_name] = $myLink;
         break;
 
 
@@ -282,7 +280,7 @@ function _cybcom_wrap2array($w) {
         // Log unhandled fields. Eventually this should be an error
         watchdog("cybcom",
           "Unhandled field %field of type %type in entity %eid.",
-          array("%field"=>$key, "%eid" => $w->getIdentifier(), "%type"=> $val['type']  )
+          array("%field"=>$field_name, "%eid" => $w->getIdentifier(), "%type"=> $field_props['type']  )
         );
     }
   }
