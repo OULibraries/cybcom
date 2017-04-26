@@ -1,5 +1,12 @@
 <?php
 
+/**
+ * @file
+ */
+
+/**
+ *
+ */
 function cybcom_drush_command() {
   $items['cybcom-mintxml'] = array(
     'description' => "Mint XML of node via CyberCommons",
@@ -7,10 +14,22 @@ function cybcom_drush_command() {
       'nid' => 'The nid',
     ),
   );
+  $items['cybcom-getresult'] = array(
+    'description' => "Update status of publication via CyberCommons",
+    'arguments' => array(
+      'nid' => 'The nid',
+    ),
+  );
   return $items;
 }
 
+/**
+ *
+ */
+function drush_cybcom_mintxml($nid) {
+  cybcom_mintxml($nid);
+}
 
-function drush_cybcom_mintxml ($nid) {
-  drush_print_r( cybcom_mintxml($nid ));
+function drush_cybcom_getresult($nid) {
+  cybcom_getresult($nid);
 }
