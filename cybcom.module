@@ -47,7 +47,7 @@ function cybcom_menu() {
 
   // JSON preview of how content will be sent to Cyber Commons
   $items['node/%cybcom_menu/cybcom/preview'] = array (
-    'title' =>"JSON Preview" ,
+    'title' => "JSON Preview" ,
     'type' => MENU_LOCAL_TASK,
     'page callback' => '_cybcom_loadNodeHtml',
     'page arguments' => array(1),
@@ -117,18 +117,23 @@ function cybcom_mintxml($nid) {
 
     // save resonse url
     $task= $response->json();
-    $w->field_cybcom_task->set($task['task_id'] );
-    $w->field_cybcom_task_uri->set( array( 'url'=>$task['result_url']));
+
+    // create a new entity and associate it with the current item
+    $cybcom_data = entity_create('field_collection_item', array('field_name' => 'field_cybcom_data'));
+    $cybcom_data->setHostEntity('node', $nd);
+
+    // load wrapper for new cybercom data entity and set values
+    $cdw = entity_metadata_wrapper('field_collection_item', $cybcom_data);
+    $cdw->field_cybcom_task->set($task['task_id'] );
+    $cdw->field_cybcom_task_uri->set( array( 'url' => $task['result_url']));
+
+    // save cybcom data entity and parent node
+    $cdw->save();
     $w->save();
 
-  } catch (EntityMetadataWrapperException $e) {
-    watchdog(
-      'cybcom',
-      'EntityMetadataWrapper exception in %function() <pre>@trace</pre>',
-      array('%function' => __FUNCTION__, '@trace' => $e->getTraceAsString()),
-      WATCHDOG_ERROR
-    );
 
+  } catch (EntityMetadataWrapperException $e) {
+    watchdog_exception('cybcom', $e);
   } catch(GuzzleHttp\Exception\TransferException $e) {
     watchdog('cybcom',
       "Trouble sending data to Cyber Commons %nid",
@@ -176,11 +181,10 @@ function _cybcom_loadNodeHtml($node) {
   $ccArrayMarkup .='</pre>';
 
   $output = array(
-    'content'=> array(
+    'content' => array(
       '#type' => 'markup',
       '#markup' => $ccArrayMarkup,
     )
-
 
   );
   return $output;
@@ -210,7 +214,7 @@ function _cybcom_wrap2array($w) {
     }
 
     // Don't worry about cybercom response fields, either
-    if( preg_match('/field_cybcom_task.*/', $field_name)) {
+    if( preg_match('/field_cybcom.*/', $field_name)) {
       continue;
     }
 
@@ -235,7 +239,7 @@ function _cybcom_wrap2array($w) {
         $myContent[$field_name]=$myVal;
         break;
 
-      // Get the term name for taxonomy terms
+        // Get the term name for taxonomy terms
       case "taxonomy_term":
         $myVal = $w->$field_name->value();
         if( empty(  $myVal )) {break; }
@@ -251,7 +255,7 @@ function _cybcom_wrap2array($w) {
         $myContent[$field_name] = array_map( $getName , $myVec);
         break;
 
-      // Get an ISO 8601 string representation of Drupal date fields
+        // Get an ISO 8601 string representation of Drupal date fields
       case "date":
         $myVal = $w->$field_name->value();
         if( empty($myVec)) { break; }
@@ -267,7 +271,7 @@ function _cybcom_wrap2array($w) {
         $myContent[$field_name] = array_map($getDate, $myVec);
         break;
 
-      // Process structured entities recursively
+        // Process structured entities recursively
       case "list<node>":
       case (preg_match('/list<field_collection_.*/', $field_props['type']) ? $field_props['type'] : !$field_props['type'] ) :
         $myVec = iterator_to_array($w->$field_name);
@@ -277,7 +281,7 @@ function _cybcom_wrap2array($w) {
         $myContent[$field_name] = array_map( $getArr, $myVec);
         break;
 
-      // Get properties of url fields
+        // Get properties of url fields
       case (preg_match('/list<field_.*_link>/', $field_props['type']) ? $field_props['type'] : !$field_props['type'] ) :
         $myVec = iterator_to_array($w->$field_name);
         if( empty( $myVec)) {break;}
@@ -303,11 +307,11 @@ function _cybcom_wrap2array($w) {
         $myContent[$field_name] = $myLink;
         break;
 
-      // Log unhandled fields.
+        // Log unhandled fields.
       default:
         watchdog("cybcom",
           "Unhandled field %field of type %type in entity %eid.",
-          array("%field"=>$field_name, "%eid" => $w->getIdentifier(), "%type"=> $field_props['type']  )
+          array("%field" => $field_name, "%eid" => $w->getIdentifier(), "%type" => $field_props['type']  )
         );
     }
   }
@@ -322,8 +326,8 @@ function _send2cybcom($cybcom_xmlurl, $cybcom_token, $cybcom_template, $cybcom_d
   $cyb_client = new GuzzleHttp\Client([
                   'defaults' => [
                     'headers' => [
-                      'Content-Type'=>'application/json',
-                      "Authorization"=>"Token ".$cybcom_token,
+                      'Content-Type' => 'application/json',
+                      "Authorization" => "Token ".$cybcom_token,
                     ]]]);
 
   $cyb_body = [
@@ -333,8 +337,8 @@ function _send2cybcom($cybcom_xmlurl, $cybcom_token, $cybcom_template, $cybcom_d
       $cybcom_data,
     ],
     "kwargs"=> [
-      "templatename"=>$cybcom_template,
-      "outname"=>$cybcom_template.".xml"
+      "templatename" => $cybcom_template,
+      "outname" => $cybcom_template.".xml"
     ],
     "tags"=> ["example.xml"],
   ];
@@ -344,6 +348,50 @@ function _send2cybcom($cybcom_xmlurl, $cybcom_token, $cybcom_template, $cybcom_d
     ['body' => json_encode($cyb_body),]
   );
 
-
   return $response;
+}
+
+
+/**
+ * POST array data to a CyberCommons site for rendering in to xml
+ */
+function _getTaskResult($cybcom_xmlurl, $cybcom_token, $cybcom_taskid) {
+
+  $cyb_client = new GuzzleHttp\Client([
+                  'defaults' => [
+                    'headers' => [
+                      'Content-Type' => 'application/json',
+                      "Authorization" => "Token ".$cybcom_token,
+                    ]]]);
+
+  $response = $cyb_client->get($cybcom_xmlurl."/api/queue/task/".$cybcom_taskid."/.json");
+  $task_json = json_decode($response->getBody() );
+
+
+  return $task_json->result ;
+}
+
+
+
+function cybcom_getresult($nid) {
+
+    // load data to mint
+    $nd = entity_load_single('node', $nid);
+    $bd = $nd->type;
+    $w = entity_metadata_wrapper("node", $nd, array('bundle' => $bd));
+
+    // get config
+    $cybcom_xmlurl = variable_get('cybcom_xmlurl', "");
+    $cybcom_token = variable_get('cybcom_token', "");
+
+    // which task?
+    $cybcom_task = $w->field_cybcom_data->field_cybcom_task->value();
+
+    $task_result = _getTaskResult($cybcom_xmlurl, $cybcom_token, $cybcom_task);
+
+    $w->field_cybcom_data->field_cybcom_status->set( $task_result->status );
+    $w->field_cybcom_data->field_cybcom_result_uri->set( array('url' => $task_result->result) );
+    $w->field_cybcom_data->save();
+    $w->save();
+
 }
