@@ -1,8 +1,11 @@
 <?php
 
+/**
+ * @file
+ */
 
 /**
- *  hook_rules_action_info().
+ * Hook_rules_action_info().
  */
 function cybcom_rules_action_info() {
   return array(
@@ -13,10 +16,24 @@ function cybcom_rules_action_info() {
         'id' => array('type' => 'unknown', 'label' => t('Identifier')),
       ),
     ),
+    'cybcom_rules_action_getresult' => array(
+      'label' => t('Udpdate status of xml metadata via CyberCommons'),
+      'group' => t('CyberCommons'),
+      'parameter' => array(
+        'id' => array('type' => 'unknown', 'label' => t('Identifier')),
+      ),
+    )
   );
 }
 
 
-function cybcom_rules_action_mintxml ($id) {
-  cybcom_mintxml($id->nid );
+/**
+ *
+ */
+function cybcom_rules_action_mintxml($id) {
+  cybcom_mintxml($id->nid);
+}
+
+function cybcom_rules_action_getresult($id) {
+  cybcom_getresult($id->nid);
 }
