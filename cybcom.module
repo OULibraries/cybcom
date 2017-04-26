@@ -144,6 +144,52 @@ function cybcom_mintxml($nid) {
   }
 }
 
+
+function cybcom_getresult($nid) {
+ watchdog('cybcom', "get result called for node ". $nid );
+
+ try {
+
+   // load node to consider
+   $nd = entity_load_single('node', $nid);
+   $bd = $nd->type;
+
+   // do some validation
+   if( $bd != "item") {
+     watchdog('cybcom', "Tried to mint invalid node type". $nid );
+     return;
+   }
+
+   // wrap the entity
+   $w = entity_metadata_wrapper("node", $nd, array('bundle' => $bd));
+
+   // get cybcom config
+   $cybcom_xmlurl = variable_get('cybcom_xmlurl', "");
+   $cybcom_token = variable_get('cybcom_token', "");
+
+   // What's the status of the task for this node?
+   $cybcom_task = $w->field_cybcom_data->field_cybcom_task->value();
+   $task_result = _getTaskResult($cybcom_xmlurl, $cybcom_token, $cybcom_task);
+
+   $w->field_cybcom_data->field_cybcom_status->set( $task_result->status );
+   $w->field_cybcom_data->field_cybcom_result_uri->set( array('url' => $task_result->result) );
+   $w->field_cybcom_data->save();
+   $w->save();
+
+ } catch (EntityMetadataWrapperException $e) {
+   watchdog_exception('cybcom', $e);
+   drupal_set_message(t('Problem getting data for CyberCommons query. Has this node been published to CyberCommons?'), 'error');
+
+ } catch(GuzzleHttp\Exception\TransferException $e) {
+   drupal_set_message(t('Problem getting task data from CyberCommons.'), 'error');
+   watchdog_exception('cybcom', $e);
+ }
+
+}
+
+
+
+
 /**
  * Load node content into CyberCommons array structure.
  */
@@ -369,29 +415,4 @@ function _getTaskResult($cybcom_xmlurl, $cybcom_token, $cybcom_taskid) {
 
 
   return $task_json->result ;
-}
-
-
-
-function cybcom_getresult($nid) {
-
-    // load data to mint
-    $nd = entity_load_single('node', $nid);
-    $bd = $nd->type;
-    $w = entity_metadata_wrapper("node", $nd, array('bundle' => $bd));
-
-    // get config
-    $cybcom_xmlurl = variable_get('cybcom_xmlurl', "");
-    $cybcom_token = variable_get('cybcom_token', "");
-
-    // which task?
-    $cybcom_task = $w->field_cybcom_data->field_cybcom_task->value();
-
-    $task_result = _getTaskResult($cybcom_xmlurl, $cybcom_token, $cybcom_task);
-
-    $w->field_cybcom_data->field_cybcom_status->set( $task_result->status );
-    $w->field_cybcom_data->field_cybcom_result_uri->set( array('url' => $task_result->result) );
-    $w->field_cybcom_data->save();
-    $w->save();
-
 }
