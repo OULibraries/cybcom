@@ -118,6 +118,9 @@ function cybcom_mintxml($nid) {
     // save resonse url
     $task= $response->json();
 
+    // clear out the previous task's info
+    $w->field_cybcom_data = NULL;	
+
     // create a new entity and associate it with the current item
     $cybcom_data = entity_create('field_collection_item', array('field_name' => 'field_cybcom_data'));
     $cybcom_data->setHostEntity('node', $nd);
@@ -134,13 +137,10 @@ function cybcom_mintxml($nid) {
 
   } catch (EntityMetadataWrapperException $e) {
     watchdog_exception('cybcom', $e);
+    drupal_set_message(t('There was a problem processing the node.'), 'error'); 
   } catch(GuzzleHttp\Exception\TransferException $e) {
-    watchdog('cybcom',
-      "Trouble sending data to Cyber Commons %nid",
-      'Guzzle exception in %function() <pre>@trace</pre>',
-      array('%function' => __FUNCTION__, '@trace' => $e->getTraceAsString()),
-      WATCHDOG_ERROR
-    );
+    watchdog_exception('cybcom', $e);
+    drupal_set_message(t('There was a problem publishing data to CyberCommons.'), 'error'); 
   }
 }
 
