@@ -6,6 +6,7 @@
  * site.
  */
 
+
 /**
  *  Implements hook_admin
  */
@@ -67,8 +68,37 @@ function cybcom_menu() {
     'delivery callback' => 'drupal_json_output',
   );
 
+  //AJAX load for cybcom data
+  $items['cybcom/data/ajax/%'] = array(
+    'page callback' => 'cybcom_ajax_get_ajax', // Render HTML.
+    'page arguments' => array(3),
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('access content'),
+    'delivery callback' => 'cybcom_ajax_callback',  // Magic goes here.
+  );
   return $items;
 }
+
+
+function cybcom_ajax_get_ajax($id) {
+  $data = entity_load_single('field_collection_item', $id );
+  ddl($data);
+  return $data->view('full', NULL, TRUE);
+}
+
+
+function cybcom_ajax_callback($page_callback_result) {
+  // Only render content
+  $content = drupal_render($page_callback_result);
+
+  // Add CSS and JS files, add some markup
+  $html = '<html><head><title></title>' . drupal_get_css() . drupal_get_js() . '</head><body class="jquery-ajax-load">' . $content . '</body></html>';
+  print $html;
+
+  // Perform end-of-request tasks.
+  drupal_page_footer();
+}
+
 
 
 /**
