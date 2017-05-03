@@ -35,5 +35,5 @@ function cybcom_rules_action_mintxml($id) {
 }
 
 function cybcom_rules_action_getresult($id) {
-  cybcom_getresult($id->nid);
+  cybcom_update_data_by_node($id->nid);
 }

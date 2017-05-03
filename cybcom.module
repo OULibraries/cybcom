@@ -30,6 +30,20 @@ function cybcom_admin() {
   return system_settings_form($form);
 }
 
+function cybcom_theme($existing, $type, $theme, $path) {
+    $theme = array();
+
+
+    $theme['field_collection_item__field_cybcom_data'] = array(
+      'render element' => 'content',
+      'base hook' => 'node',
+      'template' => 'field-collection-item--field-cybcom-data',
+      'path' => drupal_get_path('module', 'cybcom') . '/templates',
+    );
+    return $theme;
+}
+
+
 /**
  *  Implements hook_menu()
  */
@@ -69,9 +83,9 @@ function cybcom_menu() {
   );
 
   //AJAX load for cybcom data
-  $items['cybcom/data/ajax/%'] = array(
-    'page callback' => 'cybcom_ajax_get_ajax', // Render HTML.
-    'page arguments' => array(3),
+  $items['field-collection/field-cybcom-data/%/ajax'] = array(
+    'page callback' => 'cybcom_ajax_data', // Render HTML.
+    'page arguments' => array(2),
     'type' => MENU_CALLBACK,
     'access arguments' => array('access content'),
     'delivery callback' => 'cybcom_ajax_callback',  // Magic goes here.
@@ -80,9 +94,9 @@ function cybcom_menu() {
 }
 
 
-function cybcom_ajax_get_ajax($id) {
+function cybcom_ajax_data($id) {
+  cybcom_update_data($id);
   $data = entity_load_single('field_collection_item', $id );
-  ddl($data);
   return $data->view('full', NULL, TRUE);
 }
 
@@ -98,7 +112,6 @@ function cybcom_ajax_callback($page_callback_result) {
   // Perform end-of-request tasks.
   drupal_page_footer();
 }
-
 
 
 /**
@@ -149,7 +162,7 @@ function cybcom_mintxml($nid) {
     $task= $response->json();
 
     // clear out the previous task's info
-    $w->field_cybcom_data = NULL;	
+    $w->field_cybcom_data = NULL;
 
     // create a new entity and associate it with the current item
     $cybcom_data = entity_create('field_collection_item', array('field_name' => 'field_cybcom_data'));
@@ -167,16 +180,16 @@ function cybcom_mintxml($nid) {
 
   } catch (EntityMetadataWrapperException $e) {
     watchdog_exception('cybcom', $e);
-    drupal_set_message(t('There was a problem processing the node.'), 'error'); 
+    drupal_set_message(t('There was a problem processing the node.'), 'error');
   } catch(GuzzleHttp\Exception\TransferException $e) {
     watchdog_exception('cybcom', $e);
-    drupal_set_message(t('There was a problem publishing data to CyberCommons.'), 'error'); 
+    drupal_set_message(t('There was a problem publishing data to CyberCommons.'), 'error');
   }
 }
 
 
-function cybcom_getresult($nid) {
- watchdog('cybcom', "get result called for node ". $nid );
+function cybcom_update_data_by_node($nid) {
+ watchdog('cybcom', "Checking cybcom data for ". $nid );
 
  try {
 
@@ -190,25 +203,47 @@ function cybcom_getresult($nid) {
      return;
    }
 
-   // wrap the entity
    $w = entity_metadata_wrapper("node", $nd, array('bundle' => $bd));
+   $cybcom_data_id = $w->field_cybcom_data->getIdentifier();
+   cybcom_update_data($cybcom_data_id);
+
+ } catch (EntityMetadataWrapperException $e) {
+   watchdog_exception('cybcom', $e);
+   drupal_set_message(t('Problem getting data for CyberCommons query. Has this node been published to CyberCommons?'), 'error');
+ }
+
+}
+
+
+
+function cybcom_update_data($eid) {
+
+ try {
+   // wrap the entity
+   $w = entity_metadata_wrapper("field_collection_item", $eid, array('bundle' => 'field_cybcom_data'));
+
+   // Don't update metadata for a finished task
+   if( $w->field_cybcom_status->value() == "SUCCESS") {
+     return;
+   }
+
+   watchdog('cybcom', "Checking status of cybcom data entity ". $eid );
 
    // get cybcom config
    $cybcom_xmlurl = variable_get('cybcom_xmlurl', "");
    $cybcom_token = variable_get('cybcom_token', "");
 
-   // What's the status of the task for this node?
-   $cybcom_task = $w->field_cybcom_data->field_cybcom_task->value();
+   // Update the status and metadata for this task
+   $cybcom_task = $w->field_cybcom_task->value();
    $task_result = _getTaskResult($cybcom_xmlurl, $cybcom_token, $cybcom_task);
 
-   $w->field_cybcom_data->field_cybcom_status->set( $task_result->status );
-   $w->field_cybcom_data->field_cybcom_result_uri->set( array('url' => $task_result->result) );
-   $w->field_cybcom_data->save();
+   $w->field_cybcom_status->set( $task_result->status );
+   $w->field_cybcom_result_uri->set( array('url' => $task_result->result) );
    $w->save();
 
  } catch (EntityMetadataWrapperException $e) {
    watchdog_exception('cybcom', $e);
-   drupal_set_message(t('Problem getting data for CyberCommons query. Has this node been published to CyberCommons?'), 'error');
+   drupal_set_message(t('Problem getting data for CyberCommons query.'), 'error');
 
  } catch(GuzzleHttp\Exception\TransferException $e) {
    drupal_set_message(t('Problem getting task data from CyberCommons.'), 'error');
@@ -216,8 +251,6 @@ function cybcom_getresult($nid) {
  }
 
 }
-
-
 
 
 /**
