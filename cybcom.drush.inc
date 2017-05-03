@@ -5,7 +5,7 @@
  */
 
 /**
- *
+ * Implements hook_drush_command()
  */
 function cybcom_drush_command() {
   $items['cybcom-mintxml'] = array(
@@ -24,12 +24,15 @@ function cybcom_drush_command() {
 }
 
 /**
- *
+ * Send an content to cyber commons
  */
 function drush_cybcom_mintxml($nid) {
   cybcom_mintxml($nid);
 }
 
+/**
+ * Get data on task from cybercommons for node
+ */
 function drush_cybcom_getresult($nid) {
-  cybcom_getresult($nid);
+  cybcom_update_data_by_node($id->nid);
 }
