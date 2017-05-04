@@ -93,6 +93,10 @@ function cybcom_mintxml($nid) {
   watchdog('cybcom', "mintxml called for node ". $nid );
 
   try {
+    // Make sure we've got any new updates to the node
+    // See Rules bug here https://www.drupal.org/node/430274
+    entity_get_controller('node')->resetCache(array($nid));
+
     // load data to mint
     $nd = entity_load_single('node', $nid);
     $bd = $nd->type;
