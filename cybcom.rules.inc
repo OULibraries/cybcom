@@ -22,7 +22,7 @@ function cybcom_rules_action_info() {
       'parameter' => array(
         'id' => array('type' => 'unknown', 'label' => t('Identifier')),
       ),
-    )
+    ),
     'cybcom_rules_action_update_all' => array(
       'label' => t('Udpdate status of all outstanding CyberCommons tasks'),
       'group' => t('CyberCommons'),
