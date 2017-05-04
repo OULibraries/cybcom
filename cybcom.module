@@ -93,6 +93,10 @@ function cybcom_mintxml($nid) {
   watchdog('cybcom', "mintxml called for node ". $nid );
 
   try {
+    // Make sure we've got any new updates to the node
+    // See Rules bug here https://www.drupal.org/node/430274
+    entity_get_controller('node')->resetCache(array($nid));
+
     // load data to mint
     $nd = entity_load_single('node', $nid);
     $bd = $nd->type;
@@ -130,10 +134,8 @@ function cybcom_mintxml($nid) {
     $cdw->field_cybcom_task->set($task['task_id'] );
     $cdw->field_cybcom_task_uri->set( array( 'url' => $task['result_url']));
 
-    // save cybcom data entity and parent node
+    // save cybcom data entity
     $cdw->save();
-    $w->save();
-
 
   } catch (EntityMetadataWrapperException $e) {
     watchdog_exception('cybcom', $e);
