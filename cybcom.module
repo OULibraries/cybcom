@@ -130,10 +130,8 @@ function cybcom_mintxml($nid) {
     $cdw->field_cybcom_task->set($task['task_id'] );
     $cdw->field_cybcom_task_uri->set( array( 'url' => $task['result_url']));
 
-    // save cybcom data entity and parent node
+    // save cybcom data entity
     $cdw->save();
-    $w->save();
-
 
   } catch (EntityMetadataWrapperException $e) {
     watchdog_exception('cybcom', $e);
