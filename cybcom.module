@@ -220,6 +220,9 @@ function cybcom_update_data($eid) {
 
 }
 
+/**
+ * Update all outstanding CyberCommonds data entity.
+ */
 function cybcom_update_all() {
 
   // Get tasks that haven't been successful
