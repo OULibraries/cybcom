@@ -1,0 +1,8 @@
+<?php
+
+function cybcom_update_7001() {
+
+  $xmlurl = variable_get('cybcom_xmlurl', "");
+  variable_set('cybcom_baseurl', $xmlurl);
+  variable_del('cybcom_xmlurl', "");
+}

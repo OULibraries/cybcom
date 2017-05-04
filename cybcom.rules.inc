@@ -23,17 +23,31 @@ function cybcom_rules_action_info() {
         'id' => array('type' => 'unknown', 'label' => t('Identifier')),
       ),
     )
+    'cybcom_rules_action_update_all' => array(
+      'label' => t('Udpdate status of all outstanding CyberCommons tasks'),
+      'group' => t('CyberCommons'),
+    )
   );
 }
 
 
 /**
- *
+ * Send data to cyber commons to mint xml
  */
 function cybcom_rules_action_mintxml($id) {
   cybcom_mintxml($id->nid);
 }
 
+/**
+ * Get status of CyberCommons task
+ */
 function cybcom_rules_action_getresult($id) {
-  cybcom_getresult($id->nid);
+  cybcom_update_data_by_node($id->nid);
+}
+
+/**
+ * Update status of all outstanding tasks
+ */
+function cybcom_rules_action_update_all() {
+  cybcom_update_all();
 }

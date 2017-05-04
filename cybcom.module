@@ -2,9 +2,9 @@
 
 /**
  * @file
- * This module provides tools for publishing Drupal content into a CyberCommons
- * site.
+ * This module provides tools for publishing Drupal content into CyberCommons.
  */
+
 
 /**
  *  Implements hook_admin
@@ -12,10 +12,10 @@
 function cybcom_admin() {
   $form = array();
 
-  $form['cybcom_xmlurl'] = array(
+  $form['cybcom_baseurl'] = array(
     '#type' => 'textfield',
     '#title' => t('CyberCommons URL'),
-    '#default_value' => variable_get('cybcom_xmlurl', ""),
+    '#default_value' => variable_get('cybcom_baseurl', ""),
     '#required' => TRUE,
   );
 
@@ -106,20 +106,20 @@ function cybcom_mintxml($nid) {
     $w = entity_metadata_wrapper("node", $nd, array('bundle' => $bd));
 
     // get config
-    $cybcom_xmlurl = variable_get('cybcom_xmlurl', "");
+    $cybcom_baseurl = variable_get('cybcom_baseurl', "");
     $cybcom_token = variable_get('cybcom_token', "");
 
     // structure as array for cybercommons
     $cybcom_data = _cybcom_wrap2array($w);
 
     //send data to cyber commons
-    $response = _send2cybcom($cybcom_xmlurl, $cybcom_token, "speccoll.tmpl", $cybcom_data);
+    $response = _cybcom_send2cybcom($cybcom_baseurl, $cybcom_token, "speccoll.tmpl", $cybcom_data);
 
     // save resonse url
     $task= $response->json();
 
     // clear out the previous task's info
-    $w->field_cybcom_data = NULL;	
+    $w->field_cybcom_data->delete();
 
     // create a new entity and associate it with the current item
     $cybcom_data = entity_create('field_collection_item', array('field_name' => 'field_cybcom_data'));
@@ -137,16 +137,19 @@ function cybcom_mintxml($nid) {
 
   } catch (EntityMetadataWrapperException $e) {
     watchdog_exception('cybcom', $e);
-    drupal_set_message(t('There was a problem processing the node.'), 'error'); 
+    drupal_set_message(t('There was a problem processing the node.'), 'error');
   } catch(GuzzleHttp\Exception\TransferException $e) {
     watchdog_exception('cybcom', $e);
-    drupal_set_message(t('There was a problem publishing data to CyberCommons.'), 'error'); 
+    drupal_set_message(t('There was a problem publishing data to CyberCommons.'), 'error');
   }
 }
 
 
-function cybcom_getresult($nid) {
- watchdog('cybcom', "get result called for node ". $nid );
+/**
+ * Update CyberCommons data associated with node.
+ */
+function cybcom_update_data_by_node($nid) {
+ watchdog('cybcom', "Checking cybcom data for ". $nid );
 
  try {
 
@@ -160,25 +163,55 @@ function cybcom_getresult($nid) {
      return;
    }
 
-   // wrap the entity
+   // wrap node and update the associated CyberCommons entity
    $w = entity_metadata_wrapper("node", $nd, array('bundle' => $bd));
-
-   // get cybcom config
-   $cybcom_xmlurl = variable_get('cybcom_xmlurl', "");
-   $cybcom_token = variable_get('cybcom_token', "");
-
-   // What's the status of the task for this node?
-   $cybcom_task = $w->field_cybcom_data->field_cybcom_task->value();
-   $task_result = _getTaskResult($cybcom_xmlurl, $cybcom_token, $cybcom_task);
-
-   $w->field_cybcom_data->field_cybcom_status->set( $task_result->status );
-   $w->field_cybcom_data->field_cybcom_result_uri->set( array('url' => $task_result->result) );
-   $w->field_cybcom_data->save();
-   $w->save();
+   $cybcom_data_id = $w->field_cybcom_data->getIdentifier();
+   cybcom_update_data($cybcom_data_id);
 
  } catch (EntityMetadataWrapperException $e) {
    watchdog_exception('cybcom', $e);
    drupal_set_message(t('Problem getting data for CyberCommons query. Has this node been published to CyberCommons?'), 'error');
+ }
+
+}
+
+/**
+ * Update CyberCommonds data entity.
+ */
+function cybcom_update_data($eid) {
+
+ try {
+   // wrap the entity
+   $w = entity_metadata_wrapper("field_collection_item", $eid, array('bundle' => 'field_cybcom_data'));
+
+   // check for an orphaned cc data enity
+   $host_vars = get_object_vars($w->host_entity->value());
+   if( empty($host_vars)) {
+     watchdog('cybcom', "Deleting orphaned cybcom data ". $eid );
+     $w->delete();
+     return;
+   }
+
+   // Don't update metadata for a finished task
+   if( $w->field_cybcom_status->value() == "SUCCESS") {
+     return;
+   }
+   watchdog('cybcom', "Checking status of cybcom data ". $eid );
+
+   // get cybcom config
+   $cybcom_baseurl = variable_get('cybcom_baseurl', "");
+   $cybcom_token = variable_get('cybcom_token', "");
+
+   // Update the status and metadata for this task
+   $cybcom_task = $w->field_cybcom_task->value();
+   $task_result = _cybcom_getTaskResult($cybcom_baseurl, $cybcom_token, $cybcom_task);
+   $w->field_cybcom_status->set( $task_result->status );
+   $w->field_cybcom_result_uri->set( array('url' => $task_result->result) );
+   $w->save();
+
+ } catch (EntityMetadataWrapperException $e) {
+   watchdog_exception('cybcom', $e);
+   drupal_set_message(t('Problem getting data for CyberCommons query.'), 'error');
 
  } catch(GuzzleHttp\Exception\TransferException $e) {
    drupal_set_message(t('Problem getting task data from CyberCommons.'), 'error');
@@ -187,7 +220,28 @@ function cybcom_getresult($nid) {
 
 }
 
+/**
+ * Update all outstanding CyberCommonds data entity.
+ */
+function cybcom_update_all() {
 
+  // Get tasks that haven't been successful
+  $efq = new EntityFieldQuery();
+  $efq->entityCondition('entity_type', 'field_collection_item')
+    ->entityCondition('bundle', 'field_cybcom_data')
+    ->entityCondition('entity_id', 'NULL', '!=')
+    ->fieldCondition('field_cybcom_status','value', 'SUCCESS', "!=");
+  $result= $efq->execute();
+
+  // NOOP if we didn't get any unresolved tasks
+  if(! isset($result['field_collection_item'] )) { return; }
+
+  // Try to resolve outstanding tasks
+  $open_tasks = $result['field_collection_item'];
+  foreach( $open_tasks as $task) {
+    cybcom_update_data($task->item_id);
+  }
+}
 
 
 /**
@@ -367,7 +421,7 @@ function _cybcom_wrap2array($w) {
 /**
  * POST array data to a CyberCommons site for rendering in to xml
  */
-function _send2cybcom($cybcom_xmlurl, $cybcom_token, $cybcom_template, $cybcom_data) {
+function _cybcom_send2cybcom($cybcom_baseurl, $cybcom_token, $cybcom_template, $cybcom_data) {
 
   $cyb_client = new GuzzleHttp\Client([
                   'defaults' => [
@@ -390,7 +444,7 @@ function _send2cybcom($cybcom_xmlurl, $cybcom_token, $cybcom_template, $cybcom_d
   ];
 
   $response = $cyb_client->post(
-    $cybcom_xmlurl."/api/queue/run/xmlgenq.tasks.xmltemplate.metadataTemplateCreation/.json",
+    $cybcom_baseurl."/api/queue/run/xmlgenq.tasks.xmltemplate.metadataTemplateCreation/.json",
     ['body' => json_encode($cyb_body),]
   );
 
@@ -401,7 +455,7 @@ function _send2cybcom($cybcom_xmlurl, $cybcom_token, $cybcom_template, $cybcom_d
 /**
  * POST array data to a CyberCommons site for rendering in to xml
  */
-function _getTaskResult($cybcom_xmlurl, $cybcom_token, $cybcom_taskid) {
+function _cybcom_getTaskResult($cybcom_baseurl, $cybcom_token, $cybcom_taskid) {
 
   $cyb_client = new GuzzleHttp\Client([
                   'defaults' => [
@@ -410,7 +464,7 @@ function _getTaskResult($cybcom_xmlurl, $cybcom_token, $cybcom_taskid) {
                       "Authorization" => "Token ".$cybcom_token,
                     ]]]);
 
-  $response = $cyb_client->get($cybcom_xmlurl."/api/queue/task/".$cybcom_taskid."/.json");
+  $response = $cyb_client->get($cybcom_baseurl."/api/queue/task/".$cybcom_taskid."/.json");
   $task_json = json_decode($response->getBody() );
 
 
