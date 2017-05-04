@@ -2,8 +2,7 @@
 
 /**
  * @file
- * This module provides tools for publishing Drupal content into a CyberCommons
- * site.
+ * This module provides tools for publishing Drupal content into CyberCommons.
  */
 
 
@@ -146,6 +145,9 @@ function cybcom_mintxml($nid) {
 }
 
 
+/**
+ * Update CyberCommons data associated with node.
+ */
 function cybcom_update_data_by_node($nid) {
  watchdog('cybcom', "Checking cybcom data for ". $nid );
 
@@ -161,8 +163,8 @@ function cybcom_update_data_by_node($nid) {
      return;
    }
 
+   // wrap node and update the associated CyberCommons entity
    $w = entity_metadata_wrapper("node", $nd, array('bundle' => $bd));
-
    $cybcom_data_id = $w->field_cybcom_data->getIdentifier();
    cybcom_update_data($cybcom_data_id);
 
@@ -173,28 +175,28 @@ function cybcom_update_data_by_node($nid) {
 
 }
 
-
-
+/**
+ * Update CyberCommonds data entity.
+ */
 function cybcom_update_data($eid) {
 
  try {
    // wrap the entity
    $w = entity_metadata_wrapper("field_collection_item", $eid, array('bundle' => 'field_cybcom_data'));
 
-   // Don't update metadata for a finished task
-   if( $w->field_cybcom_status->value() == "SUCCESS") {
-     return;
-   }
-   watchdog('cybcom', "Checking status of cybcom data entity ". $eid );
-
    // check for an orphaned cc data enity
    $host_vars = get_object_vars($w->host_entity->value());
    if( empty($host_vars)) {
+     watchdog('cybcom', "Deleting orphaned cybcom data ". $eid );
      $w->delete();
      return;
    }
 
-
+   // Don't update metadata for a finished task
+   if( $w->field_cybcom_status->value() == "SUCCESS") {
+     return;
+   }
+   watchdog('cybcom', "Checking status of cybcom data ". $eid );
 
    // get cybcom config
    $cybcom_baseurl = variable_get('cybcom_baseurl', "");
@@ -202,8 +204,7 @@ function cybcom_update_data($eid) {
 
    // Update the status and metadata for this task
    $cybcom_task = $w->field_cybcom_task->value();
-   $task_result = _getTaskResult($cybcom_baseurl, $cybcom_token, $cybcom_task);
-
+   $task_result = _cybcom_getTaskResult($cybcom_baseurl, $cybcom_token, $cybcom_task);
    $w->field_cybcom_status->set( $task_result->status );
    $w->field_cybcom_result_uri->set( array('url' => $task_result->result) );
    $w->save();
@@ -219,7 +220,6 @@ function cybcom_update_data($eid) {
 
 }
 
-
 function cybcom_update_all() {
 
   // Get tasks that haven't been successful
@@ -233,14 +233,12 @@ function cybcom_update_all() {
   // NOOP if we didn't get any unresolved tasks
   if(! isset($result['field_collection_item'] )) { return; }
 
-  // Try to resolve some tasks
+  // Try to resolve outstanding tasks
   $open_tasks = $result['field_collection_item'];
   foreach( $open_tasks as $task) {
     cybcom_update_data($task->item_id);
   }
 }
-
-
 
 
 /**
@@ -454,7 +452,7 @@ function _cybcom_send2cybcom($cybcom_baseurl, $cybcom_token, $cybcom_template, $
 /**
  * POST array data to a CyberCommons site for rendering in to xml
  */
-function _getTaskResult($cybcom_baseurl, $cybcom_token, $cybcom_taskid) {
+function _cybcom_getTaskResult($cybcom_baseurl, $cybcom_token, $cybcom_taskid) {
 
   $cyb_client = new GuzzleHttp\Client([
                   'defaults' => [
