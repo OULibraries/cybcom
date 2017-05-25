@@ -374,10 +374,17 @@ function _cybcom_wrap2array($w) {
         break;
 
         // Process structured entities recursively
+      case "node":
+        $myNode = $w->$field_name->value();
+        if(empty($myNode)) {break; }
+
+        $myContent[$field_name] = _cybcom_wrap2array($w->$field_name);
+        break;
+
       case "list<node>":
       case (preg_match('/list<field_collection_.*/', $field_props['type']) ? $field_props['type'] : !$field_props['type'] ) :
         $myVec = iterator_to_array($w->$field_name);
-        if( empty( $myVec)) {break;}
+        if( empty( $myVec)) {break; }
 
         $getArr = function($i) { return _cybcom_wrap2array($i);};
         $myContent[$field_name] = array_map( $getArr, $myVec);
