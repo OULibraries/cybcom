@@ -1,1 +1,12 @@
 <?php
+
+
+/* 
+ * Implements hook_webfork_submission_insert($node, $submission) 
+ */
+
+function cybcom_forms($node, $submission) {
+
+ddl($submission);
+
+}
