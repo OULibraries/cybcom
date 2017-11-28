@@ -1,0 +1,94 @@
+<?php
+
+/**
+ *  Admin form form submission  settings 
+ */
+function cybcom_forms_admin() {
+  $form = array();
+
+  $form['cybcom_etd_token'] = array(
+    '#type' => 'textfield',
+    '#title' => t('CyberCommons ETD token'),
+    '#default_value' => variable_get('cybcom_etd_token', ""),
+    '#required' => FALSE,
+  );
+
+  // slightly better than hard-coding the etd form nid  
+  $form['cybcom_etd_form_id'] = array(
+    '#type' => 'textfield',
+    '#title' => t('CyberCommons ETD Form Id'),
+    '#default_value' => variable_get('cybcom_etd_form_id', ""),
+    '#required' => FALSE,
+  );
+
+  return system_settings_form($form);
+}
+
+/**
+ *  Implements hook_menu()
+ */
+function cybcom_forms_menu() {
+  $items = array();
+
+  // ETD Admin Settings Page
+  $items['admin/config/cybcom/etd'] = array(
+    'title' => 'CyberCommons Form Settings',
+    'description' => 'Settings related to CybCom ETD form',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('cybcom_forms_admin'),
+    'access arguments' => array('administer cybcom settings'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}
+
+/*
+ * Implements hook_webform_submission_insert($node, $submission)
+ */
+function cybcom_forms_webform_submission_presave($node, $submission) {
+
+  $cybcom_etd_form_id  = variable_get('cybcom_etd_form_id','');
+
+  if($node->nid != $cybcom_etd_form_id  ) { return; }
+
+  $cybcom_baseurl = variable_get('cybcom_baseurl', "");
+  $cybcom_etd_token = variable_get('cybcom_etd_token', "");
+
+  /* Convert submission array into a minimally-labeled hash */
+  $etd_data = array();
+  foreach ($node->webform['components'] as $key => $component) {
+    $my_val = $submission->data[$key];
+    if(count($my_val) == 1) {
+      $my_val = $my_val[0];
+    }
+    $etd_data[ $component['form_key'] ] = $my_val;
+  }
+
+  /* This should do some error handling */
+  $response = _cybcom_sendETD($cybcom_baseurl, $cybcom_etd_token, $etd_data);
+
+  $myform = $node->nid;
+  $ccid = $response->json(); // successful response will be just submission catalog id
+  watchdog("cybcom", "Webform %formid sent to catalog, got id %ccid", array('%formid'=>$myform, '%ccid'=>$ccid));
+
+}
+
+/*
+ *  Publish data to cybcom data catalog 
+ */
+function _cybcom_sendETD($cybcom_baseurl, $cybcom_token, $cybcom_etd) {
+
+  $cyb_client = new GuzzleHttp\Client([
+                 'defaults' => [
+                   'headers' => [
+                     'Content-Type' => 'application/json',
+                     "Authorization" => "Token ".$cybcom_token,
+                   ]]]);
+
+  $response = $cyb_client->post(
+    $cybcom_baseurl."/api/catalog/data/catalog/etd/.json",
+    ['body' => json_encode($cybcom_etd),]
+  );
+  return $response;
+}

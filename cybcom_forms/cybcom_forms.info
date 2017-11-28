@@ -1,0 +1,5 @@
+name = CyberCommons Forms Integration
+description = OU Libraries CyberCommons Forms integration for ETD project
+core = 7.x
+dependencies[] = cybcom:cybcom
+dependencies[] = webform:webform
