@@ -44,7 +44,7 @@ function cybcom_forms_menu() {
 }
 
 /*
- * Implements hook_webform_submission_insert($node, $submission)
+ * Implements hook_webform_submission_presave($node, $submission)
  */
 function cybcom_forms_webform_submission_presave($node, $submission) {
 
