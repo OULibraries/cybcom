@@ -57,6 +57,9 @@ function cybcom_forms_webform_submission_presave($node, $submission) {
 
   /* Convert submission array into a minimally-labeled hash */
   $etd_data = array();
+
+  $etd_data["submitted-timestamp"] = $submission->submitted; 
+
   foreach ($node->webform['components'] as $key => $component) {
     $my_val = $submission->data[$key];
     if(count($my_val) == 1) {
